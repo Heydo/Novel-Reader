@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Novel Reader & TTS",
+  "description": "A high-quality novel reader that splits long text into chapters and generates natural-sounding speech using the Gemini 2.5 TTS engine.",
+  "requestFramePermissions": []
+}
