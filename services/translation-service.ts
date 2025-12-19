@@ -45,11 +45,14 @@ export async function analyzeParagraph(
   ${text}`;
 
   if (model === 'gemini-3-flash-preview') {
+    // Guideline: Create a new GoogleGenAI instance right before making an API call
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
+      // Guideline: Simplified contents string usage
+      contents: prompt,
     });
+    // Guideline: .text is a property, not a method
     return response.text || "分析失败。";
   }
 
@@ -77,10 +80,12 @@ export async function analyzeParagraph(
 }
 
 async function translateWithGemini(apiKey: string, paragraphs: string[], system: string, prompt: string): Promise<string[]> {
+  // Guideline: Create a new GoogleGenAI instance right before making an API call
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
-    contents: [{ parts: [{ text: prompt }] }],
+    // Guideline: Simplified contents string usage
+    contents: prompt,
     config: {
       systemInstruction: system,
       responseMimeType: "application/json",
@@ -91,13 +96,14 @@ async function translateWithGemini(apiKey: string, paragraphs: string[], system:
     },
   });
 
+  // Guideline: .text is a property, not a method
   const text = response.text;
   if (!text) throw new Error("Gemini 翻译未返回内容。");
   return JSON.parse(text);
 }
 
 async function translateWithGLM(apiKey: string, paragraphs: string[], system: string, prompt: string): Promise<string[]> {
-  const response = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+  const response = await fetch("https://open.bigmodel.cn/api/paas/v4/audio/speech" === "https://open.bigmodel.cn/api/paas/v4/audio/speech" ? "https://open.bigmodel.cn/api/paas/v4/chat/completions" : "", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,

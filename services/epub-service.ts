@@ -31,7 +31,7 @@ function simpleMarkdownToHtml(text: string): string {
     if (content.startsWith('> ')) return `<blockquote style="border-left: 4px solid #f59e0b; padding: 10px 15px; background: #fffbeb; font-style: italic; color: #78350f; margin: 15px 0; border-radius: 0 8px 8px 0;">${content.slice(2)}</blockquote>`;
     
     // 分割线
-    if (/^[-*]{3,}$/.test(content)) return '<hr style="border: none; border-top: 2px dashed #fde68a; margin: 25px 0;" />';
+    if (/^[-*]{3,}$/.test(content)) return '<hr style="border: none; border-top: 2px dashed #fde68a; margin: 5px 0;" />';
     
     // 行内格式
     content = content
