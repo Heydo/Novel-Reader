@@ -122,29 +122,38 @@ export async function generateEpub(data: ChapterExportData): Promise<Blob> {
       margin-bottom: 20px; 
       border-left: 4px solid #cbd5e1;
     }
+    
+    /* 解析区块样式 - 实现折叠交互 */
     .analysis-container { 
       font-size: 0.95em; 
       background-color: #fffbeb; 
-      padding: 24px; 
       border: 1px solid #fef3c7; 
-      border-radius: 20px; 
+      border-radius: 16px; 
       margin-top: 15px; 
       color: #451a03;
+      overflow: hidden;
     }
-    .analysis-header { 
-      display: flex;
-      align-items: center;
+    summary.analysis-header { 
+      padding: 15px 20px;
       font-weight: bold; 
       color: #92400e; 
-      margin-bottom: 15px; 
-      font-size: 1.15em; 
-      border-bottom: 1px solid #fde68a; 
-      padding-bottom: 8px; 
+      cursor: pointer;
+      outline: none;
+      background-color: #fef3c7;
+      border: none;
+      list-style-position: inside;
     }
-    .analysis-header:before {
-      content: "✦ ";
-      color: #f59e0b;
+    summary.analysis-header:hover {
+      background-color: #fde68a;
     }
+    details[open] summary.analysis-header {
+      border-bottom: 1px solid #fde68a;
+    }
+    .analysis-content {
+      padding: 20px;
+      line-height: 1.7;
+    }
+    
     audio { 
       width: 100%; 
       height: 40px; 
@@ -205,10 +214,12 @@ export async function generateEpub(data: ChapterExportData): Promise<Blob> {
     if (analysis) {
       chapterHtml += `
       <div class="analysis-container">
-        <div class="analysis-header">AI 语言深度解析报告</div>
-        <div class="analysis-content">
-          ${simpleMarkdownToHtml(analysis)}
-        </div>
+        <details>
+          <summary class="analysis-header">AI 语言深度解析报告 (点击展开)</summary>
+          <div class="analysis-content">
+            ${simpleMarkdownToHtml(analysis)}
+          </div>
+        </details>
       </div>`;
     }
     
