@@ -14,7 +14,6 @@ import { generateEpub } from './services/epub-service';
 import { WelcomeView } from './components/WelcomeView';
 import { Sidebar } from './components/Sidebar';
 import { ControlHeader } from './components/ControlHeader';
-import { SettingsPanel } from './components/SettingsPanel';
 import { ParagraphItem } from './components/ParagraphItem';
 import { MusicalStaff } from './components/MusicalStaff';
 
@@ -29,7 +28,6 @@ export default function App() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [isBatchAnalyzing, setIsBatchAnalyzing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   const [isFullAutoRunning, setIsFullAutoRunning] = useState(false);
   
@@ -262,8 +260,18 @@ export default function App() {
           isFullAutoRunning={isFullAutoRunning}
           handleExportEpub={handleExportEpub}
           isExporting={isExporting}
-          isSettingsOpen={isSettingsOpen}
-          setIsSettingsOpen={setIsSettingsOpen}
+          selectedModel={selectedModel}
+          setSelectedModel={setSelectedModel}
+          selectedVoice={selectedVoice}
+          setSelectedVoice={setSelectedVoice}
+          selectedTranslationModel={selectedTranslationModel}
+          setSelectedTranslationModel={setSelectedTranslationModel}
+          batchGenerateAudio={batchGenerateParagraphs}
+          isBatchGenerating={isBatchGenerating}
+          handleTranslate={handleTranslateChapter}
+          isTranslating={isTranslating}
+          handleMerge={mergeExistingParagraphs}
+          isMerging={isMerging}
         />
 
         <div className="flex-1 overflow-y-auto">
@@ -271,12 +279,12 @@ export default function App() {
             {activeChapter && (
               <>
                 <header className="mb-24">
-                   <div className="text-[9px] font-black tracking-[0.5em] uppercase opacity-30 mb-3 text-center">Movement No. {(activeChapterIndex + 1).toString().padStart(2, '0')}</div>
+                   <div className="text-[9px] font-black tracking-[0.5em] uppercase opacity-30 mb-3 text-center">当前章节 No. {(activeChapterIndex + 1).toString().padStart(2, '0')}</div>
                    <h1 className="text-5xl md:text-6xl font-black serif-text text-center tracking-tighter leading-tight border-b-2 border-black pb-8 mb-4">{activeChapter.title}</h1>
                    <div className="flex justify-between items-center text-[8px] font-bold uppercase opacity-20 tracking-widest px-1">
-                      <span>Gemini Novel Studio Edition</span>
-                      <span>Vol. 1</span>
-                      <span>{new Date().toLocaleDateString()}</span>
+                      <span>Gemini 小说工作室 · 珍藏版</span>
+                      <span>卷 一</span>
+                      <span>创作时间：{new Date().toLocaleDateString()}</span>
                    </div>
                    <MusicalStaff />
                 </header>
@@ -301,34 +309,16 @@ export default function App() {
                 </div>
 
                 <footer className="mt-48 flex items-center justify-between border-t-2 border-black pt-8 mb-32">
-                   <div className="text-3xl font-black serif-text opacity-10 italic">Fin.</div>
+                   <div className="text-3xl font-black serif-text opacity-10 italic">本章完</div>
                    <div className="flex space-x-10">
-                      <button disabled={activeChapterIndex === 0} onClick={() => { setActiveChapterIndex(p => p - 1); clearChapterData(); }} className="text-[10px] font-black tracking-widest uppercase disabled:opacity-5 hover:opacity-100 opacity-40 transition-opacity">PREV</button>
-                      <button disabled={activeChapterIndex === chapters.length - 1} onClick={() => { setActiveChapterIndex(p => p + 1); clearChapterData(); }} className="text-[10px] font-black tracking-widest uppercase disabled:opacity-5 hover:opacity-100 opacity-40 transition-opacity">NEXT</button>
+                      <button disabled={activeChapterIndex === 0} onClick={() => { setActiveChapterIndex(p => p - 1); clearChapterData(); }} className="text-[10px] font-black tracking-widest uppercase disabled:opacity-5 hover:opacity-100 opacity-40 transition-opacity">上一章 PREV</button>
+                      <button disabled={activeChapterIndex === chapters.length - 1} onClick={() => { setActiveChapterIndex(p => p + 1); clearChapterData(); }} className="text-[10px] font-black tracking-widest uppercase disabled:opacity-5 hover:opacity-100 opacity-40 transition-opacity">下一章 NEXT</button>
                    </div>
                 </footer>
               </>
             )}
           </div>
         </div>
-
-        {isSettingsOpen && (
-          <SettingsPanel 
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
-            selectedVoice={selectedVoice}
-            setSelectedVoice={setSelectedVoice}
-            selectedTranslationModel={selectedTranslationModel}
-            setSelectedTranslationModel={setSelectedTranslationModel}
-            batchGenerateParagraphs={batchGenerateParagraphs}
-            isBatchGenerating={isBatchGenerating}
-            handleTranslateChapter={handleTranslateChapter}
-            isTranslating={isTranslating}
-            mergeExistingParagraphs={mergeExistingParagraphs}
-            isMerging={isMerging}
-            setIsSettingsOpen={setIsSettingsOpen}
-          />
-        )}
       </main>
     </div>
   );

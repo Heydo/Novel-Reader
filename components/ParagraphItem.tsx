@@ -64,7 +64,7 @@ export const ParagraphItem: React.FC<ParagraphItemProps> = ({
 
              {analysis && (
                <div className="bg-[#1a1a1a] text-[#e8e4d8] p-8 space-y-3 shadow-sm">
-                  <div className="text-[9px] font-black tracking-[0.3em] uppercase opacity-40 border-b border-white/10 pb-2 mb-2">Column: Linguistic Analysis</div>
+                  <div className="text-[9px] font-black tracking-[0.3em] uppercase opacity-40 border-b border-white/10 pb-2 mb-2">栏目：英语研习与表达分析报告</div>
                   <SimpleMarkdown text={analysis} />
                </div>
              )}
@@ -74,7 +74,7 @@ export const ParagraphItem: React.FC<ParagraphItemProps> = ({
                  onClick={() => handleAnalyzeParagraph(idx)}
                  className="text-[9px] font-black tracking-[0.2em] uppercase opacity-30 hover:opacity-100 transition-opacity"
                >
-                  {isAnalyzing ? '[ Reading between lines... ]' : '[ Request Deep Analysis ]'}
+                  {isAnalyzing ? '[ 正在提取语言要点... ]' : '[ 获取英语学习分析 ]'}
                </button>
              )}
           </div>
