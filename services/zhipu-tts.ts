@@ -1,21 +1,19 @@
 
 import { decodeAudioData } from "./audio-service";
-
-const API_KEY = process.env.API_KEY || '';
+import { getApiKey } from "./api-config";
+import { MODEL_NAMES, API_URLS } from "./model-config";
 
 export async function generateTTS(text: string, voiceName: string): Promise<AudioBuffer> {
-  if (!API_KEY) {
-    throw new Error("未检测到 API Key。请在环境变量中配置 API_KEY。");
-  }
+  const apiKey = getApiKey('zhipu');
 
-  const response = await fetch("https://open.bigmodel.cn/api/paas/v4/audio/speech", {
+  const response = await fetch(`${API_URLS.ZHIPU}/audio/speech`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${API_KEY}`,
+      "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "glm-tts",
+      model: MODEL_NAMES.ZHIPU.TTS,
       input: text,
       voice: voiceName,
       speed: 1.0,
@@ -26,16 +24,12 @@ export async function generateTTS(text: string, voiceName: string): Promise<Audi
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    const errorMsg = errorData.error?.message || `HTTP error! status: ${response.status}`;
+    const errorMsg = errorData.error?.message || `智谱 API 错误: ${response.status}`;
     throw new Error(errorMsg);
   }
 
-  // Zhipu returns the binary WAV data
   const arrayBuffer = await response.arrayBuffer();
-  
   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-  
-  // Browsers can decode WAV natively via decodeAudioData
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
   
   return audioBuffer;

@@ -1,20 +1,19 @@
 
 import { decodeAudioData } from "./audio-service";
+import { getApiKey } from "./api-config";
+import { MODEL_NAMES, API_URLS } from "./model-config";
 
 export async function generateOpenAITTS(text: string, voiceName: string): Promise<AudioBuffer> {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("未检测到 API Key。请在环境变量中配置 API_KEY。");
-  }
+  const apiKey = getApiKey('openai');
 
-  const response = await fetch("https://api.302.ai/v1/audio/speech", {
+  const response = await fetch(`${API_URLS.OPENAI}/audio/speech`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini-tts",
+      model: MODEL_NAMES.OPENAI.TTS,
       input: text,
       voice: voiceName,
       response_format: "mp3"
@@ -23,14 +22,12 @@ export async function generateOpenAITTS(text: string, voiceName: string): Promis
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    const errorMsg = errorData.error?.message || `OpenAI API Error: ${response.status}`;
+    const errorMsg = errorData.error?.message || `OpenAI API 错误: ${response.status}`;
     throw new Error(errorMsg);
   }
 
   const arrayBuffer = await response.arrayBuffer();
   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-  
-  // Browsers decode WAV/MP3 from OpenAI natively
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
   
   return audioBuffer;
