@@ -10,37 +10,33 @@
     <style>
         body { 
           font-family: 'EB Garamond', 'Noto Serif SC', serif; 
-          background-color: #e8e4d8; 
-          color: #1a1a1a;
+          background-color: #ffffff; 
+          color: #000000;
         }
         .serif-text { font-family: 'Noto Serif SC', serif; }
         .newspaper-font { font-family: 'EB Garamond', 'Noto Serif SC', serif; }
         .mono-text { font-family: 'Fira Code', monospace; }
         
-        .staff-lines {
-          background-image: linear-gradient(#ccc 1px, transparent 1px);
-          background-size: 100% 4px;
-          height: 20px;
-          opacity: 0.3;
-          margin: 2rem 0;
-        }
-
         .paper-texture {
           position: fixed;
           top: 0; left: 0; width: 100%; height: 100%;
           pointer-events: none;
-          opacity: 0.06;
+          opacity: 0.03;
           z-index: 9999;
           background-image: url("https://www.transparenttextures.com/patterns/natural-paper.png");
         }
 
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #b0ab99; border-radius: 0; }
-        ::-webkit-scrollbar-thumb:hover { background: #8e8a7a; }
+        ::-webkit-scrollbar-thumb { background: #d1d1d1; border-radius: 0; }
+        ::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
 
-        /* Typography refinements for newspaper style */
         p { text-align: justify; text-justify: inter-character; }
+        
+        /* 针对黑白色调的对比度优化 */
+        .border-subtle { border-color: rgba(0, 0, 0, 0.08); }
+        .bg-sidebar { background-color: #f8f8f8; }
+        .bg-header { background-color: rgba(255, 255, 255, 0.95); }
     </style>
 <script type="importmap">
 {
@@ -54,7 +50,7 @@
 }
 </script>
 </head>
-<body class="selection:bg-[#1a1a1a] selection:text-[#e8e4d8]">
+<body class="selection:bg-black selection:text-white">
     <div class="paper-texture"></div>
     <div id="root"></div>
 </body>

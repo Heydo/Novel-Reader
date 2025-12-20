@@ -22,6 +22,7 @@ export default function App() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [activeChapterIndex, setActiveChapterIndex] = useState(0);
   const [inputText, setInputText] = useState('');
+  const [bookTitle, setBookTitle] = useState('未命名作品');
   
   const [isBatchGenerating, setIsBatchGenerating] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
@@ -183,7 +184,7 @@ export default function App() {
       const pAudioBlobs: Record<number, Blob> = {};
       Object.entries(paragraphBuffers).forEach(([idx, buffer]) => { pAudioBlobs[Number(idx)] = audioBufferToWav(buffer); });
       const blob = await generateEpub({
-        title: activeChapter.title,
+        title: activeChapter.title || bookTitle,
         paragraphs,
         translations: translatedParagraphs,
         analyses: paragraphAnalyses,
@@ -192,7 +193,7 @@ export default function App() {
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `${activeChapter.title}.epub`; a.click();
+      a.href = url; a.download = `${bookTitle || activeChapter.title}.epub`; a.click();
       URL.revokeObjectURL(url);
     } finally { setIsExporting(false); }
   };
@@ -208,6 +209,8 @@ export default function App() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const fileNameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'));
+    setBookTitle(fileNameWithoutExt);
     e.target.value = '';
     if (file.name.toLowerCase().endsWith('.epub')) {
       const parsed = await parseEpubFile(file);
@@ -216,7 +219,7 @@ export default function App() {
     } else {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        setChapters(splitTextIntoChapters(ev.target?.result as string));
+        setChapters(splitTextIntoChapters(ev.target?.result as string, fileNameWithoutExt));
         setMode('reader'); setActiveChapterIndex(0); clearChapterData();
       };
       reader.readAsText(file);
@@ -230,6 +233,8 @@ export default function App() {
         handleFileChange={handleFileChange}
         inputText={inputText}
         setInputText={setInputText}
+        bookTitle={bookTitle}
+        setBookTitle={setBookTitle}
         setChapters={setChapters}
         setMode={setMode}
         setActiveChapterIndex={setActiveChapterIndex}
@@ -282,7 +287,7 @@ export default function App() {
                    <div className="text-[9px] font-black tracking-[0.5em] uppercase opacity-30 mb-3 text-center">当前章节 No. {(activeChapterIndex + 1).toString().padStart(2, '0')}</div>
                    <h1 className="text-5xl md:text-6xl font-black serif-text text-center tracking-tighter leading-tight border-b-2 border-black pb-8 mb-4">{activeChapter.title}</h1>
                    <div className="flex justify-between items-center text-[8px] font-bold uppercase opacity-20 tracking-widest px-1">
-                      <span>Gemini 小说工作室 · 珍藏版</span>
+                      <span>{bookTitle} · 珍藏版</span>
                       <span>卷 一</span>
                       <span>创作时间：{new Date().toLocaleDateString()}</span>
                    </div>

@@ -18,10 +18,10 @@ export const Button: React.FC<ButtonProps> = ({
   const baseStyles = "inline-flex items-center justify-center font-bold tracking-tighter uppercase transition-all focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed";
   
   const variants = {
-    primary: "bg-[#1a1a1a] text-[#e8e4d8] hover:bg-black",
-    secondary: "bg-[#b0ab99] text-[#1a1a1a] hover:bg-[#8e8a7a]",
-    outline: "border-2 border-[#1a1a1a] bg-transparent text-[#1a1a1a] hover:bg-[#1a1a1a] hover:text-[#e8e4d8]",
-    danger: "bg-red-900 text-white hover:bg-red-950",
+    primary: "bg-black text-white hover:bg-gray-800",
+    secondary: "bg-gray-200 text-black hover:bg-gray-300",
+    outline: "border-2 border-black bg-transparent text-black hover:bg-black hover:text-white",
+    danger: "bg-red-600 text-white hover:bg-red-700",
   };
 
   const sizes = {

@@ -1,7 +1,7 @@
 
 import { Chapter } from '../types';
 
-export function splitTextIntoChapters(text: string): Chapter[] {
+export function splitTextIntoChapters(text: string, defaultTitle: string = 'Full Content'): Chapter[] {
   // Regex pattern for common chapter headers in Chinese novels:
   // "第[一二三四五六七八九十百千万0-9]+[章节回]"
   // Also common English patterns: "Chapter [0-9]+"
@@ -10,10 +10,10 @@ export function splitTextIntoChapters(text: string): Chapter[] {
   const matches = [...text.matchAll(pattern)];
   
   if (matches.length === 0) {
-    // If no chapters found, treat whole text as one chapter
+    // If no chapters found, treat whole text as one chapter using provided defaultTitle
     return [{
       id: '1',
-      title: 'Full Content',
+      title: defaultTitle,
       content: text.trim()
     }];
   }
