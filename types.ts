@@ -12,7 +12,7 @@ export interface VoiceOption {
 
 export type AppMode = 'welcome' | 'reader';
 export type TTSModel = 'glm-tts' | 'gemini-tts' | 'openai-tts';
-export type TranslationModel = 'glm-4-9-air' | 'gemini-3-flash-preview' | 'gpt-3.5-turbo';
+export type TranslationModel = 'glm-4.6v-flash' | 'gemini-3-flash-preview' | 'gpt-3.5-turbo';
 
 export const MODEL_OPTIONS = [
   { id: 'glm-tts' as TTSModel, name: '智谱 GLM-TTS (超拟人)' },
@@ -22,7 +22,7 @@ export const MODEL_OPTIONS = [
 
 export const TRANSLATION_MODEL_OPTIONS = [
   { id: 'gemini-3-flash-preview' as TranslationModel, name: 'Gemini 3 Flash' },
-  { id: 'glm-4-9-air' as TranslationModel, name: 'GLM-4-Air' },
+  { id: 'glm-4.6v-flash' as TranslationModel, name: 'GLM-4.6v-Flash' },
   { id: 'gpt-3.5-turbo' as TranslationModel, name: 'GPT-3.5 Turbo' },
 ];
 

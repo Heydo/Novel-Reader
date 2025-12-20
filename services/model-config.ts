@@ -11,7 +11,7 @@ export const MODEL_NAMES = {
   },
   ZHIPU: {
     TTS: 'glm-tts',
-    CHAT: 'glm-4-9-air',
+    CHAT: 'glm-4.6v-flash',
   },
   OPENAI: {
     TTS: 'gpt-4o-mini-tts',

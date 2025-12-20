@@ -10,7 +10,7 @@ export async function translateChapter(
   model: TranslationModel
 ): Promise<string[]> {
   const apiKey = (model === 'gemini-3-flash-preview') ? getApiKey('gemini') : 
-                 (model === 'glm-4-9-air') ? getApiKey('zhipu') : getApiKey('openai');
+                 (model === 'glm-4.6v-flash') ? getApiKey('zhipu') : getApiKey('openai');
 
   const sourceLang = direction === 'zh-en' ? 'Chinese' : 'English';
   const targetLang = direction === 'zh-en' ? 'English' : 'Chinese';
@@ -26,7 +26,7 @@ ${paragraphs.map((p, i) => `[${i}]: ${p}`).join('\n')}`;
 
   if (model === 'gemini-3-flash-preview') {
     return translateWithGemini(apiKey, paragraphs, systemInstruction, userPrompt);
-  } else if (model === 'glm-4-9-air') {
+  } else if (model === 'glm-4.6v-flash') {
     return translateWithGLM(apiKey, paragraphs, systemInstruction, userPrompt);
   } else {
     return translateWithOpenAI(apiKey, paragraphs, systemInstruction, userPrompt);
@@ -38,7 +38,7 @@ export async function analyzeParagraph(
   model: TranslationModel
 ): Promise<string> {
   const apiKey = (model === 'gemini-3-flash-preview') ? getApiKey('gemini') : 
-                 (model === 'glm-4-9-air') ? getApiKey('zhipu') : getApiKey('openai');
+                 (model === 'glm-4.6v-flash') ? getApiKey('zhipu') : getApiKey('openai');
 
   const prompt = `请作为资深英语教学专家，对以下段落进行深入的英语语言学习解析：
 1. **核心单词 (Vocabulary)**: 提取3-5个核心词汇，标注音标、在本语境下的含义及常见搭配。
@@ -79,8 +79,8 @@ ${text}`;
     }
   }
 
-  const baseUrl = model === 'glm-4-9-air' ? API_URLS.ZHIPU : API_URLS.OPENAI;
-  const targetModel = model === 'glm-4-9-air' ? MODEL_NAMES.ZHIPU.CHAT : MODEL_NAMES.OPENAI.CHAT;
+  const baseUrl = model === 'glm-4.6v-flash' ? API_URLS.ZHIPU : API_URLS.OPENAI;
+  const targetModel = model === 'glm-4.6v-flash' ? MODEL_NAMES.ZHIPU.CHAT : MODEL_NAMES.OPENAI.CHAT;
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
