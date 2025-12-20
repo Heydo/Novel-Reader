@@ -1,5 +1,5 @@
 {
-  "name": "Gemini Novel Reader & TTS",
-  "description": "A high-quality novel reader that splits long text into chapters and generates natural-sounding speech using the Gemini 2.5 TTS engine.",
+  "name": "Gemini Novel Studio",
+  "description": "专业的 AI 小说朗读与文学深度解析工具，集成 Gemini 2.5 TTS 与 Gemini 3 Pro 推理能力。",
   "requestFramePermissions": []
 }

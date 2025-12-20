@@ -15,10 +15,11 @@ export async function translateChapter(
   const sourceLang = direction === 'zh-en' ? 'Chinese' : 'English';
   const targetLang = direction === 'zh-en' ? 'English' : 'Chinese';
 
-  const systemInstruction = `You are a professional book translator. Translate text from ${sourceLang} to ${targetLang}. 
-Maintain original tone and style. 
-Return ONLY a JSON array of strings, where each string corresponds to the input paragraph at the same index. 
-The array must have exactly ${paragraphs.length} elements.`;
+  const systemInstruction = `You are a professional book translator specializing in literary translation. 
+Translate text from ${sourceLang} to ${targetLang}. 
+Maintain the original prose's tone, atmosphere, and nuances. 
+Return ONLY a JSON array of strings. 
+The array must have exactly ${paragraphs.length} elements, matching the input paragraph order.`;
 
   const userPrompt = `Translate these ${paragraphs.length} paragraphs:
 ${paragraphs.map((p, i) => `[${i}]: ${p}`).join('\n')}`;
@@ -39,23 +40,30 @@ export async function analyzeParagraph(
   const apiKey = process.env.API_KEY;
   if (!apiKey) throw new Error("未检测到 API Key。");
 
-  const prompt = `请对以下段落进行深入的语言学分析，包括重点词汇(Vocabulary)、语法点(Grammar)以及长难句拆解(Complex Sentences)。请使用中文回答，并保持排版清晰易读。
-  
-  待分析文本：
-  ${text}`;
+  const prompt = `请对以下段落进行深入的文学与语言学解析：
+1. **重点词汇 (Vocabulary)**: 提取优美或高频词汇并解析用法。
+2. **语法与修辞 (Grammar & Rhetoric)**: 分析特殊句式、比喻、拟人等修辞手法。
+3. **意境与基调 (Mood & Context)**: 探讨作者通过这段文字传达的情感或背景。
+请使用中文回答，保持排版优美。
+
+待分析文本：
+${text}`;
 
   if (model === 'gemini-3-flash-preview') {
-    // Guideline: Create a new GoogleGenAI instance right before making an API call
     const ai = new GoogleGenAI({ apiKey });
+    // 升级：对于分析任务使用 Gemini 3 Pro 以获得更深邃的洞察力
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      // Guideline: Simplified contents string usage
+      model: "gemini-3-pro-preview",
       contents: prompt,
+      config: {
+        // 启用 Thinking 模式，赋予 AI 思考预算以应对复杂的文学分析
+        thinkingConfig: { thinkingBudget: 16384 }
+      }
     });
-    // Guideline: .text is a property, not a method
-    return response.text || "分析失败。";
+    return response.text || "解析失败。";
   }
 
+  // 其他模型保持原样，修正 fetch URL
   const url = model === 'glm-4-9-air' 
     ? "https://open.bigmodel.cn/api/paas/v4/chat/completions" 
     : "https://api.302.ai/v1/chat/completions";
@@ -80,11 +88,9 @@ export async function analyzeParagraph(
 }
 
 async function translateWithGemini(apiKey: string, paragraphs: string[], system: string, prompt: string): Promise<string[]> {
-  // Guideline: Create a new GoogleGenAI instance right before making an API call
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
-    // Guideline: Simplified contents string usage
     contents: prompt,
     config: {
       systemInstruction: system,
@@ -96,14 +102,18 @@ async function translateWithGemini(apiKey: string, paragraphs: string[], system:
     },
   });
 
-  // Guideline: .text is a property, not a method
   const text = response.text;
   if (!text) throw new Error("Gemini 翻译未返回内容。");
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("Failed to parse Gemini translation JSON", text);
+    throw new Error("翻译数据格式解析失败。");
+  }
 }
 
 async function translateWithGLM(apiKey: string, paragraphs: string[], system: string, prompt: string): Promise<string[]> {
-  const response = await fetch("https://open.bigmodel.cn/api/paas/v4/audio/speech" === "https://open.bigmodel.cn/api/paas/v4/audio/speech" ? "https://open.bigmodel.cn/api/paas/v4/chat/completions" : "", {
+  const response = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
