@@ -2,6 +2,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Chapter, AppMode, MODEL_OPTIONS, VOICE_OPTIONS_MAP, TTSModel, TRANSLATION_MODEL_OPTIONS, TranslationModel } from './types';
 import { splitTextIntoChapters } from './utils/text-parser';
+import { parseEpubFile } from './utils/epub-parser';
 import { Button } from './components/Button';
 import { generateTTS as generateZhipuTTS } from './services/zhipu-tts';
 import { generateGeminiTTS } from './services/gemini-tts';
@@ -15,80 +16,24 @@ interface ErrorDetail {
   explanation: string;
 }
 
-const SimpleMarkdown: React.FC<{ text: string }> = ({ text }) => {
-  const parseInline = (content: string): React.ReactNode[] => {
-    let parts: (string | React.ReactNode)[] = [content];
-    parts = parts.flatMap(part => {
-      if (typeof part !== 'string') return part;
-      const regex = /`(.*?)`/g;
-      const result = [];
-      let lastIndex = 0;
-      let match;
-      while ((match = regex.exec(part)) !== null) {
-        if (match.index > lastIndex) result.push(part.substring(lastIndex, match.index));
-        result.push(<code key={`code-${match.index}`} className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono text-[0.85em] border border-amber-200 mx-0.5">{match[1]}</code>);
-        lastIndex = regex.lastIndex;
-      }
-      result.push(part.substring(lastIndex));
-      return result;
-    });
-    parts = parts.flatMap(part => {
-      if (typeof part !== 'string') return part;
-      const regex = /\*\*(.*?)\*\*/g;
-      const result = [];
-      let lastIndex = 0;
-      let match;
-      while ((match = regex.exec(part)) !== null) {
-        if (match.index > lastIndex) result.push(part.substring(lastIndex, match.index));
-        result.push(<strong key={`bold-${match.index}`} className="text-amber-950 font-black">{match[1]}</strong>);
-        lastIndex = regex.lastIndex;
-      }
-      result.push(part.substring(lastIndex));
-      return result;
-    });
-    parts = parts.flatMap(part => {
-      if (typeof part !== 'string') return part;
-      const regex = /\*(.*?)\*/g;
-      const result = [];
-      let lastIndex = 0;
-      let match;
-      while ((match = regex.exec(part)) !== null) {
-        if (match.index > lastIndex) result.push(part.substring(lastIndex, match.index));
-        result.push(<em key={`italic-${match.index}`} className="italic text-slate-700">{match[1]}</em>);
-        lastIndex = regex.lastIndex;
-      }
-      result.push(part.substring(lastIndex));
-      return result;
-    });
-    return parts;
-  };
+const MusicalStaff: React.FC = () => (
+  <div className="flex flex-col space-y-1 my-12 opacity-10">
+    <div className="h-px bg-current w-full"></div>
+    <div className="h-px bg-current w-full"></div>
+    <div className="h-px bg-current w-full"></div>
+    <div className="h-px bg-current w-full"></div>
+    <div className="h-px bg-current w-full"></div>
+  </div>
+);
 
+const SimpleMarkdown: React.FC<{ text: string }> = ({ text }) => {
   const lines = text.split('\n');
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 font-serif text-[15px] leading-relaxed text-[#4a4a4a]">
       {lines.map((line, i) => {
         const trimmed = line.trim();
         if (trimmed === '') return <div key={i} className="h-2"></div>;
-        if (/^[-*]{3,}$/.test(trimmed)) return <hr key={i} className="my-6 border-amber-200 border-t-2 border-dashed" />;
-        const headerMatch = trimmed.match(/^(#{1,4})\s+(.*)/);
-        if (headerMatch) {
-          const level = headerMatch[1].length;
-          const styles = [
-            "text-2xl font-black text-amber-950 mb-4 border-b-2 border-amber-200 pb-2",
-            "text-xl font-bold text-amber-900 mb-3",
-            "text-lg font-bold text-amber-800 mb-2 flex items-center before:content-[''] before:w-1 before:h-4 before:bg-amber-400 before:mr-2 before:rounded",
-            "text-base font-bold text-amber-700 mb-1"
-          ][level - 1];
-          return React.createElement(`h${level}`, { key: i, className: styles }, ...parseInline(headerMatch[2]));
-        }
-        if (trimmed.startsWith('>')) {
-          return (
-            <blockquote key={i} className="border-l-4 border-amber-300 bg-amber-50/50 p-4 rounded-r-xl italic text-slate-700 my-4 shadow-sm">
-               {parseInline(trimmed.replace(/^>\s?/, ''))}
-            </blockquote>
-          );
-        }
-        return <p key={i} className="leading-relaxed text-slate-700 text-base">{parseInline(line)}</p>;
+        return <p key={i}>{line}</p>;
       })}
     </div>
   );
@@ -107,8 +52,6 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
-  const [isAutoAudioRunning, setIsAutoAudioRunning] = useState(false);
-  const [isAutoTransAnalysisRunning, setIsAutoTransAnalysisRunning] = useState(false);
   const [isFullAutoRunning, setIsFullAutoRunning] = useState(false);
   
   const [selectedModel, setSelectedModel] = useState<TTSModel>('gemini-tts');
@@ -145,11 +88,10 @@ export default function App() {
     setSelectedVoice(VOICE_OPTIONS_MAP[selectedModel][0].id);
   }, [selectedModel]);
 
-  const clearChapterData = () => {
+  const clearChapterData = useCallback(() => {
     activeUrls.current.forEach(url => URL.revokeObjectURL(url));
     activeUrls.current.clear();
     setAudioUrl(null);
-    if (mergedAudioBlobRef.current) mergedAudioBlobRef.current = null;
     setParagraphAudios({});
     setParagraphBuffers({});
     setTranslatedParagraphs({});
@@ -157,21 +99,23 @@ export default function App() {
     setCollapsedAnalyses({});
     setErrorDetail(null);
     setPlayingParagraphIdx(null);
-    setIsBatchGenerating(false);
-    setIsMerging(false);
-    setIsTranslating(false);
-    setIsBatchAnalyzing(false);
-    setIsAutoAudioRunning(false);
-    setIsAutoTransAnalysisRunning(false);
-    setIsFullAutoRunning(false);
-  };
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
+    if (paragraphAudioRef.current) { paragraphAudioRef.current.pause(); paragraphAudioRef.current.src = ""; }
+  }, []);
 
-  const getErrorExplanation = (err: any): ErrorDetail => {
-    const msg = err.message || String(err);
-    let explanation = "发生了未知错误。";
-    if (msg.includes("API Key") || msg.includes("401")) explanation = "API 密钥无效。";
-    else if (msg.includes("429")) explanation = "已达到配额限制。";
-    return { message: msg, explanation };
+  const deleteChapter = (chapterId: string, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!window.confirm('确定要移除此章节吗？')) return;
+    const idx = chapters.findIndex(c => c.id === chapterId);
+    const newChapters = chapters.filter(c => c.id !== chapterId);
+    if (newChapters.length === 0) { setMode('welcome'); setChapters([]); return; }
+    if (idx === activeChapterIndex) {
+      setActiveChapterIndex(Math.min(idx, newChapters.length - 1));
+      clearChapterData();
+    } else if (idx < activeChapterIndex) {
+      setActiveChapterIndex(p => p - 1);
+    }
+    setChapters(newChapters);
   };
 
   const generateAudioData = async (text: string): Promise<{ url: string, buffer: AudioBuffer }> => {
@@ -185,28 +129,29 @@ export default function App() {
     return { url, buffer: audioBuffer };
   };
 
-  const handleTranslateChapter = async (): Promise<Record<number, string>> => {
-    if (!paragraphs.length) return {};
+  const handleFullAuto = async () => {
+    setIsFullAutoRunning(true);
+    try {
+      await batchGenerateParagraphs();
+      const tMap = await handleTranslateChapter();
+      await batchAnalyzeParagraphs(tMap);
+      await mergeExistingParagraphs();
+    } finally { setIsFullAutoRunning(false); }
+  };
+
+  const handleTranslateChapter = async () => {
     setIsTranslating(true);
-    setErrorDetail(null);
     try {
       const results = await translateChapter(paragraphs, translateDirection, selectedTranslationModel);
       const translatedMap: Record<number, string> = {};
       results.forEach((text, idx) => { translatedMap[idx] = text; });
       setTranslatedParagraphs(translatedMap);
       return translatedMap;
-    } catch (err: any) {
-      setErrorDetail(getErrorExplanation(err));
-      throw err;
-    } finally {
-      setIsTranslating(false);
-    }
+    } finally { setIsTranslating(false); }
   };
 
   const batchGenerateParagraphs = async () => {
-    if (!paragraphs.length) return;
     setIsBatchGenerating(true);
-    setErrorDetail(null);
     try {
       for (let i = 0; i < paragraphs.length; i++) {
         if (paragraphBuffers[i]) continue;
@@ -215,9 +160,6 @@ export default function App() {
         setParagraphAudios(prev => ({ ...prev, [i]: result.url }));
         setParagraphBuffers(prev => ({ ...prev, [i]: result.buffer }));
       }
-    } catch (err: any) {
-      setErrorDetail(getErrorExplanation(err));
-      throw err;
     } finally {
       setIsBatchGenerating(false);
       setGeneratingParagraphIdx(null);
@@ -233,117 +175,25 @@ export default function App() {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       const mergedBuffer = concatenateAudioBuffers(buffers, audioCtx);
       const mergedBlob = audioBufferToWav(mergedBuffer);
-      mergedAudioBlobRef.current = mergedBlob;
       const newUrl = URL.createObjectURL(mergedBlob);
-      activeUrls.current.add(newUrl);
       setAudioUrl(newUrl);
-    } catch (err: any) {
-      setErrorDetail(getErrorExplanation(err));
-      throw err;
-    } finally {
-      setIsMerging(false);
-    }
+    } finally { setIsMerging(false); }
   };
 
   const batchAnalyzeParagraphs = async (currentTranslated?: Record<number, string>) => {
-    if (!paragraphs.length) return;
-    const targetTranslated = currentTranslated || translatedParagraphs;
     setIsBatchAnalyzing(true);
-    setErrorDetail(null);
+    const targetTranslated = currentTranslated || translatedParagraphs;
     try {
       for (let i = 0; i < paragraphs.length; i++) {
         if (paragraphAnalyses[i]) continue;
         const targetText = translateDirection === 'zh-en' ? (targetTranslated[i] || paragraphs[i]) : paragraphs[i];
-        if (!targetText) continue;
         setAnalyzingIdx(i);
         const analysis = await analyzeParagraph(targetText, selectedTranslationModel);
         setParagraphAnalyses(prev => ({ ...prev, [i]: analysis }));
-        setCollapsedAnalyses(prev => ({ ...prev, [i]: false }));
       }
-    } catch (err: any) {
-      setErrorDetail(getErrorExplanation(err));
-      throw err;
     } finally {
       setIsBatchAnalyzing(false);
       setAnalyzingIdx(null);
-    }
-  };
-
-  const handleAnalyzeParagraph = async (idx: number) => {
-    setErrorDetail(null);
-    setAnalyzingIdx(idx);
-    try {
-      const targetText = translateDirection === 'zh-en' 
-        ? (translatedParagraphs[idx] || paragraphs[idx]) 
-        : paragraphs[idx];
-      const analysis = await analyzeParagraph(targetText, selectedTranslationModel);
-      setParagraphAnalyses(prev => ({ ...prev, [idx]: analysis }));
-      setCollapsedAnalyses(prev => ({ ...prev, [idx]: false }));
-    } catch (err: any) {
-      setErrorDetail(getErrorExplanation(err));
-    } finally {
-      setAnalyzingIdx(null);
-    }
-  };
-
-  const handleAutoAudio = async () => {
-    setIsAutoAudioRunning(true);
-    try {
-      await batchGenerateParagraphs();
-      await mergeExistingParagraphs();
-    } catch (e) {
-       console.error("Auto Audio failed", e);
-    } finally {
-      setIsAutoAudioRunning(false);
-    }
-  };
-
-  const handleAutoTransAnalysis = async () => {
-    setIsAutoTransAnalysisRunning(true);
-    try {
-      const tMap = await handleTranslateChapter();
-      await batchAnalyzeParagraphs(tMap);
-    } catch (e) {
-       console.error("Auto Trans/Analysis failed", e);
-    } finally {
-      setIsAutoTransAnalysisRunning(false);
-    }
-  };
-
-  const handleFullAuto = async () => {
-    setIsFullAutoRunning(true);
-    try {
-      await Promise.all([handleAutoAudio(), handleAutoTransAnalysis()]);
-    } catch (e) {
-       console.error("Full Auto workflow failed", e);
-    } finally {
-      setIsFullAutoRunning(false);
-    }
-  };
-
-  const handleExportEpub = async () => {
-    if (!activeChapter) return;
-    setIsExporting(true);
-    try {
-      if (!mergedAudioBlobRef.current && Object.keys(paragraphBuffers).length > 0) await mergeExistingParagraphs();
-      const pAudioBlobs: Record<number, Blob> = {};
-      Object.entries(paragraphBuffers).forEach(([idx, buffer]) => { pAudioBlobs[Number(idx)] = audioBufferToWav(buffer); });
-      const blob = await generateEpub({
-        title: activeChapter.title,
-        paragraphs,
-        translations: translatedParagraphs,
-        analyses: paragraphAnalyses,
-        audioBlob: mergedAudioBlobRef.current || undefined,
-        paragraphAudioBlobs: pAudioBlobs
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `${activeChapter.title}.epub`; a.click();
-      URL.revokeObjectURL(url);
-    } catch (err: any) {
-      setErrorDetail(getErrorExplanation(err));
-    } finally {
-      setIsExporting(false);
     }
   };
 
@@ -355,53 +205,73 @@ export default function App() {
     player.play().catch(() => setPlayingParagraphIdx(null));
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    if (file.name.toLowerCase().endsWith('.epub')) {
+      const parsed = await parseEpubFile(file);
+      setChapters(parsed);
+      setMode('reader'); setActiveChapterIndex(0); clearChapterData();
+    } else {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setChapters(splitTextIntoChapters(ev.target?.result as string));
+        setMode('reader'); setActiveChapterIndex(0); clearChapterData();
+      };
+      reader.readAsText(file);
+    }
+  };
+
   if (mode === 'welcome') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#fdfdfb]">
-        <div className="max-w-4xl w-full flex flex-col items-center space-y-12">
-          <div className="text-center space-y-4">
-             <div className="inline-flex items-center px-4 py-1.5 bg-indigo-50 rounded-full text-indigo-600 text-xs font-black uppercase tracking-widest mb-4">
-               Gemini Powered Novel Studio
-             </div>
-             <h1 className="text-5xl font-black text-slate-900 tracking-tight serif-text">AI 深度朗读与文学工坊</h1>
-             <p className="text-slate-500 text-lg max-w-xl mx-auto leading-relaxed">集成 Gemini 2.5 极致拟人语音与 Gemini 3 Pro 深度文学推理，为您打造沉浸式的多模态阅读体验。</p>
-          </div>
+      <div className="h-screen w-full flex overflow-hidden relative">
+        {/* Poster Style Sidebar Info */}
+        <div className="w-16 h-full border-r border-black/10 flex flex-col items-center py-10 space-y-24">
+           <div className="rotate-90 origin-center whitespace-nowrap text-[10px] font-black tracking-[0.5em] uppercase opacity-40">Gemini Powered Novel Studio</div>
+           <div className="rotate-90 origin-center whitespace-nowrap text-[10px] font-black tracking-[0.5em] uppercase opacity-40">Est. 2024</div>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 w-full max-w-3xl">
-            <div 
-              className="group relative bg-white border-2 border-slate-100 rounded-3xl p-10 flex flex-col items-center justify-center space-y-6 cursor-pointer hover:border-indigo-400 hover:shadow-2xl transition-all duration-500 overflow-hidden"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/0 via-transparent to-indigo-50/20 group-hover:opacity-100 opacity-0 transition-opacity"></div>
-              <div className="w-20 h-20 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center text-3xl font-bold group-hover:rotate-12 group-hover:scale-110 transition-all shadow-lg shadow-indigo-200">↑</div>
-              <div className="text-center">
-                <p className="font-black text-xl text-slate-800 mb-2">上传 TXT 文稿</p>
-                <p className="text-slate-400 text-sm">自动切分章节，智能识别语境</p>
-              </div>
-              <input type="file" ref={fileInputRef} onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                  setChapters(splitTextIntoChapters(event.target?.result as string));
-                  setMode('reader'); setActiveChapterIndex(0); clearChapterData();
-                };
-                reader.readAsText(file);
-              }} className="hidden" accept=".txt" />
+        <div className="flex-1 flex flex-col items-center justify-center p-12 overflow-y-auto">
+          <div className="max-w-3xl w-full grid grid-cols-1 md:grid-cols-2 gap-20">
+            {/* Left Column: Huge Artistic Title */}
+            <div className="flex flex-col justify-center space-y-6">
+               <div className="text-[10px] font-black tracking-[0.4em] uppercase opacity-40">Novel · Audio · Vision</div>
+               <h1 className="text-8xl font-black serif-text leading-[0.85] tracking-tighter">文学<br/><span className="text-5xl">的</span>结局<br/><span className="italic text-4xl font-normal opacity-60">Music 时分</span></h1>
+               <div className="staff-lines !my-4"></div>
+               <p className="text-sm font-medium leading-relaxed opacity-60 max-w-xs">集成 Gemini 2.5 拟人语音与 3.0 深度推理，将文字转化为感官的合奏曲。</p>
             </div>
 
-            <div className="flex flex-col space-y-6">
-              <textarea 
-                className="flex-1 p-6 border-2 border-slate-100 rounded-3xl text-sm min-h-[180px] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-inner bg-slate-50/30 resize-none font-serif text-lg leading-relaxed" 
-                placeholder="在此粘贴文本片段..." 
-                value={inputText} 
-                onChange={(e) => setInputText(e.target.value)} 
-              />
-              <Button onClick={() => {
-                if (!inputText.trim()) return;
-                setChapters(splitTextIntoChapters(inputText));
-                setMode('reader'); setActiveChapterIndex(0); clearChapterData();
-              }} disabled={!inputText.trim()} className="w-full py-4 text-base font-black tracking-widest uppercase shadow-xl hover:translate-y-[-2px] active:translate-y-[1px]">进入创作工坊</Button>
+            {/* Right Column: Interaction */}
+            <div className="flex flex-col justify-center space-y-10">
+               <div 
+                 className="group cursor-pointer border-4 border-black p-8 hover:bg-black hover:text-[#e8e4d8] transition-all"
+                 onClick={() => fileInputRef.current?.click()}
+               >
+                 <div className="text-4xl font-black mb-2">UPLOAD</div>
+                 <div className="text-[10px] font-black tracking-widest uppercase opacity-60 group-hover:opacity-100">Drop TXT / EPUB Files Here</div>
+                 <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".txt,.epub" />
+               </div>
+
+               <div className="flex flex-col space-y-4">
+                  <textarea 
+                    className="w-full h-48 p-6 bg-transparent border-2 border-black/20 focus:border-black outline-none resize-none serif-text text-xl"
+                    placeholder="或者，在此粘贴您的文字..."
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                  />
+                  <Button 
+                    variant="primary" 
+                    size="lg" 
+                    disabled={!inputText.trim()}
+                    onClick={() => {
+                      setChapters(splitTextIntoChapters(inputText));
+                      setMode('reader'); setActiveChapterIndex(0); clearChapterData();
+                    }}
+                  >
+                    开始演奏 ENTER STUDIO
+                  </Button>
+               </div>
             </div>
           </div>
         </div>
@@ -409,252 +279,165 @@ export default function App() {
     );
   }
 
-  const generatedCount = Object.keys(paragraphBuffers).length;
-  const translatedCount = Object.keys(translatedParagraphs).length;
-
   return (
-    <div className="flex h-screen bg-white overflow-hidden text-slate-900">
+    <div className="flex h-screen overflow-hidden">
       <audio ref={paragraphAudioRef} className="hidden" onEnded={() => setPlayingParagraphIdx(null)} />
 
-      {/* 侧边栏 */}
-      <aside className="w-64 flex-shrink-0 border-r border-slate-100 bg-slate-50/50 flex flex-col z-10">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="font-black text-lg text-slate-800 tracking-tight serif-text">章节目录</h2>
-          <button onClick={() => setMode('welcome')} className="text-[10px] font-black uppercase text-slate-400 hover:text-rose-500 transition-colors">退出</button>
+      {/* Program List Sidebar */}
+      <aside className="w-80 flex-shrink-0 border-r border-black/10 flex flex-col bg-[#dfdbcc]">
+        <div className="p-8 border-b border-black/10">
+          <div className="text-[10px] font-black tracking-[0.3em] uppercase opacity-40 mb-2">Program List</div>
+          <h2 className="text-3xl font-black serif-text tracking-tighter">章节目录</h2>
         </div>
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-          {chapters.map((chapter, index) => (
-            <button 
-              key={chapter.id} 
-              onClick={() => { setActiveChapterIndex(index); clearChapterData(); }} 
-              className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-all flex items-center group ${activeChapterIndex === index ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-100' : 'text-slate-500 hover:bg-white hover:shadow-sm'}`}
+          {chapters.map((chapter, idx) => (
+            <div 
+              key={chapter.id}
+              className={`group flex items-center p-3 cursor-pointer transition-all ${activeChapterIndex === idx ? 'bg-black text-[#e8e4d8]' : 'hover:bg-black/5'}`}
+              onClick={() => { setActiveChapterIndex(idx); clearChapterData(); }}
             >
-              <span className={`w-6 font-mono text-[10px] opacity-50 ${activeChapterIndex === index ? 'text-indigo-200' : ''}`}>{(index + 1).toString().padStart(2, '0')}</span>
-              <span className="truncate flex-1">{chapter.title}</span>
-            </button>
-          ))}
-        </nav>
-      </aside>
-
-      {/* 主阅读区域 */}
-      <main className="flex-1 flex flex-col overflow-hidden relative">
-        {/* 极简单层工具栏 */}
-        <header className="sticky top-0 z-40 flex items-center justify-between px-6 h-14 bg-white/80 backdrop-blur-md border-b border-slate-100 shadow-sm">
-          <div className="flex items-center space-x-4">
-            <h1 className="font-black text-sm tracking-widest uppercase text-slate-400 serif-text truncate max-w-[200px] hidden md:block">
-              {activeChapter?.title}
-            </h1>
-            <div className="h-4 w-px bg-slate-100 hidden md:block"></div>
-            {/* 核心工作流按钮 */}
-            <div className="flex items-center space-x-1">
-              <Button 
-                size="sm" 
-                onClick={handleFullAuto} 
-                isLoading={isFullAutoRunning} 
-                className="rounded-full px-4 h-9 font-black text-[10px] uppercase tracking-widest shadow-md shadow-indigo-100 border-none bg-indigo-600 hover:bg-indigo-700"
-              >
-                {isFullAutoRunning ? '自动生成中' : '全自动处理'}
-              </Button>
-              <Button 
-                variant="outline"
-                size="sm" 
-                onClick={handleExportEpub} 
-                isLoading={isExporting} 
-                className="rounded-full px-4 h-9 font-black text-[10px] uppercase tracking-widest border-emerald-100 text-emerald-600 hover:bg-emerald-50"
-              >
-                导出 EPUB
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {/* 状态展示 */}
-            <div className="flex items-center space-x-3 bg-slate-50 px-4 h-9 rounded-full border border-slate-100 transition-all hover:bg-indigo-50/50">
-               <div className="flex items-center space-x-1.5" title="音频合成进度">
-                 <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full"></div>
-                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Audio {generatedCount}/{paragraphs.length}</span>
-               </div>
-               <div className="flex items-center space-x-1.5" title="翻译进度">
-                 <div className="w-1.5 h-1.5 bg-violet-400 rounded-full"></div>
-                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Trans {translatedCount}/{paragraphs.length}</span>
-               </div>
-            </div>
-
-            <div className="h-4 w-px bg-slate-100"></div>
-
-            {/* 设置与分步操作 */}
-            <div className="flex items-center space-x-1">
+              <span className="w-8 font-black text-[10px] opacity-40">{String(idx + 1).padStart(2, '0')}</span>
+              <span className="flex-1 truncate serif-text font-bold">{chapter.title}</span>
               <button 
-                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                className={`w-9 h-9 flex items-center justify-center rounded-full transition-all border ${isSettingsOpen ? 'bg-indigo-50 border-indigo-200 text-indigo-600 ring-2 ring-indigo-50' : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'}`}
+                onClick={(e) => deleteChapter(chapter.id, e)}
+                className="opacity-0 group-hover:opacity-40 hover:!opacity-100 px-2"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                ✕
               </button>
             </div>
-          </div>
+          ))}
+        </nav>
+        <div className="p-8 border-t border-black/10">
+           <Button variant="outline" className="w-full" onClick={() => setMode('welcome')}>返回首页 HOME</Button>
+        </div>
+      </aside>
 
-          {/* 设置浮层 */}
-          {isSettingsOpen && (
-            <div className="absolute top-16 right-6 w-80 bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 space-y-6 animate-in zoom-in-95 duration-200 origin-top-right">
-              <div className="space-y-4">
-                <div className="flex flex-col space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">TTS 引擎与音色</label>
-                  <div className="grid grid-cols-1 gap-2">
-                    <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value as TTSModel)} className="w-full bg-slate-50 border border-slate-100 rounded-xl text-xs px-3 py-2 font-bold outline-none">
-                      {MODEL_OPTIONS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <header className="h-16 flex items-center justify-between px-10 border-b border-black/10 z-20 bg-[#e8e4d8]/80 backdrop-blur-md">
+           <div className="flex items-center space-x-6">
+             <div className="text-[10px] font-black tracking-[0.4em] uppercase opacity-30">Studio Session</div>
+             <div className="h-4 w-px bg-black/10"></div>
+             <div className="flex space-x-2">
+                <Button size="sm" onClick={handleFullAuto} isLoading={isFullAutoRunning}>全自动 FULL AUTO</Button>
+                <button 
+                  onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                  className={`px-3 py-1 text-[10px] font-black uppercase border-2 border-black ${isSettingsOpen ? 'bg-black text-[#e8e4d8]' : ''}`}
+                >
+                  配置 SETTINGS
+                </button>
+             </div>
+           </div>
+
+           <div className="flex items-center space-x-6">
+             <div className="flex space-x-4 text-[10px] font-black uppercase opacity-40 tracking-widest">
+               <span>Audio {Object.keys(paragraphBuffers).length}/{paragraphs.length}</span>
+               <span>Trans {Object.keys(translatedParagraphs).length}/{paragraphs.length}</span>
+             </div>
+           </div>
+
+           {isSettingsOpen && (
+             <div className="absolute top-16 right-10 w-80 bg-black text-[#e8e4d8] p-8 space-y-6 z-50 shadow-2xl animate-in fade-in slide-in-from-top-2">
+                <div className="space-y-4">
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[9px] font-black opacity-50 tracking-widest">TTS MODEL</label>
+                    <select value={selectedModel} onChange={e => setSelectedModel(e.target.value as TTSModel)} className="bg-transparent border-b border-[#e8e4d8]/20 py-2 text-xs outline-none focus:border-white">
+                      {MODEL_OPTIONS.map(m => <option key={m.id} value={m.id} className="text-black">{m.name}</option>)}
                     </select>
-                    <select value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl text-xs px-3 py-2 font-bold outline-none">
-                      {VOICE_OPTIONS_MAP[selectedModel].map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[9px] font-black opacity-50 tracking-widest">VOICE</label>
+                    <select value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)} className="bg-transparent border-b border-[#e8e4d8]/20 py-2 text-xs outline-none focus:border-white">
+                      {VOICE_OPTIONS_MAP[selectedModel].map(v => <option key={v.id} value={v.id} className="text-black">{v.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[9px] font-black opacity-50 tracking-widest">TRANSLATION</label>
+                    <select value={selectedTranslationModel} onChange={e => setSelectedTranslationModel(e.target.value as TranslationModel)} className="bg-transparent border-b border-[#e8e4d8]/20 py-2 text-xs outline-none focus:border-white">
+                      {TRANSLATION_MODEL_OPTIONS.map(m => <option key={m.id} value={m.id} className="text-black">{m.name}</option>)}
                     </select>
                   </div>
                 </div>
-                <div className="flex flex-col space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">翻译模型与方向</label>
-                  <div className="flex flex-col space-y-2">
-                    <select value={selectedTranslationModel} onChange={(e) => setSelectedTranslationModel(e.target.value as TranslationModel)} className="w-full bg-slate-50 border border-slate-100 rounded-xl text-xs px-3 py-2 font-bold outline-none">
-                      {TRANSLATION_MODEL_OPTIONS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
-                    <button 
-                      onClick={() => setTranslateDirection(translateDirection === 'zh-en' ? 'en-zh' : 'zh-en')}
-                      className="w-full h-10 flex items-center justify-center bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black transition-all hover:bg-indigo-100 group active:scale-95"
-                    >
-                      <span className="mr-2 opacity-60">方向:</span>
-                      <span className="flex items-center space-x-2">
-                         <span className={translateDirection === 'zh-en' ? 'text-indigo-900' : 'text-slate-400'}>{translateDirection === 'zh-en' ? '中文' : '英文'}</span>
-                         <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-                         <span className={translateDirection === 'en-zh' ? 'text-indigo-900' : 'text-slate-400'}>{translateDirection === 'zh-en' ? '英文' : '中文'}</span>
-                      </span>
-                    </button>
-                  </div>
+                <div className="pt-4 border-t border-[#e8e4d8]/10 grid grid-cols-2 gap-2">
+                   <button onClick={batchGenerateParagraphs} className="text-[10px] font-black border border-white/20 py-2 hover:bg-white/10">GEN AUDIO</button>
+                   <button onClick={handleTranslateChapter} className="text-[10px] font-black border border-white/20 py-2 hover:bg-white/10">TRANSLATE</button>
+                   <button onClick={mergeExistingParagraphs} className="text-[10px] font-black border border-white/20 py-2 hover:bg-white/10">MERGE ALL</button>
+                   <button onClick={() => setIsSettingsOpen(false)} className="text-[10px] font-black bg-white text-black py-2">CLOSE</button>
                 </div>
-              </div>
-              <div className="h-px bg-slate-100"></div>
-              <div className="grid grid-cols-2 gap-2">
-                 <Button variant="outline" size="sm" onClick={batchGenerateParagraphs} isLoading={isBatchGenerating} className="text-[10px] font-black uppercase tracking-widest rounded-xl border-slate-200">分步:音频</Button>
-                 <Button variant="outline" size="sm" onClick={handleTranslateChapter} isLoading={isTranslating} className="text-[10px] font-black uppercase tracking-widest rounded-xl border-slate-200">分步:翻译</Button>
-                 <Button variant="outline" size="sm" onClick={() => batchAnalyzeParagraphs()} isLoading={isBatchAnalyzing} className="text-[10px] font-black uppercase tracking-widest rounded-xl border-slate-200">分步:解析</Button>
-                 <Button variant="outline" size="sm" onClick={mergeExistingParagraphs} isLoading={isMerging} className="text-[10px] font-black uppercase tracking-widest rounded-xl border-slate-200">拼接音轨</Button>
-              </div>
-            </div>
-          )}
+             </div>
+           )}
         </header>
 
-        {/* 内容展示区 */}
-        <div className="flex-1 overflow-y-auto bg-white">
-          <article className="max-w-4xl mx-auto py-20 px-10 md:px-16 animate-in fade-in duration-700">
-            {activeChapter ? (
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto py-32 px-12">
+            {activeChapter && (
               <>
-                <header className="mb-20 text-center">
-                  <div className="text-[10px] font-black tracking-[0.4em] text-slate-200 uppercase mb-4">Chapter {(activeChapterIndex + 1).toString().padStart(2, '0')}</div>
-                  <h1 className="text-5xl font-black text-slate-900 serif-text tracking-tight">{activeChapter.title}</h1>
+                <header className="mb-32">
+                   <div className="text-[10px] font-black tracking-[0.6em] uppercase opacity-20 mb-4 text-center">Movement No. {(activeChapterIndex + 1).toString().padStart(2, '0')}</div>
+                   <h1 className="text-7xl font-black serif-text text-center tracking-tighter leading-tight">{activeChapter.title}</h1>
+                   <MusicalStaff />
                 </header>
 
-                {audioUrl && (
-                  <div className="mb-16 bg-indigo-50/50 p-6 rounded-3xl border border-indigo-100 flex items-center justify-between shadow-sm animate-in slide-in-from-top-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"></path></svg>
-                      </div>
-                      <span className="text-xs font-black text-indigo-700 uppercase tracking-widest">章节精选音轨</span>
-                    </div>
-                    <audio ref={audioRef} controls src={audioUrl} className="h-10" />
-                  </div>
-                )}
-
-                {errorDetail && (
-                  <div className="mb-10 bg-rose-50 p-4 rounded-2xl border border-rose-100 text-[11px] font-black text-rose-600 uppercase flex items-center space-x-3">
-                    <span className="text-lg">⚠️</span>
-                    <span>{errorDetail.explanation}: {errorDetail.message}</span>
-                  </div>
-                )}
-
-                <div className="serif-text space-y-24">
-                  {paragraphs.map((pText, idx) => {
+                <div className="space-y-40">
+                  {paragraphs.map((text, idx) => {
                     const isPlaying = playingParagraphIdx === idx;
                     const hasAudio = !!paragraphAudios[idx];
                     const translation = translatedParagraphs[idx];
                     const analysis = paragraphAnalyses[idx];
-                    const isAnalyzingP = analyzingIdx === idx;
-                    const isCollapsed = collapsedAnalyses[idx] || false;
 
                     return (
-                      <div key={idx} className={`relative flex flex-col space-y-8 transition-all duration-700 ${isPlaying ? 'opacity-100' : 'opacity-80 hover:opacity-100'}`}>
-                        {/* 正文与播放控制 */}
-                        <div className="flex items-start space-x-6">
-                           <button 
-                            onClick={() => hasAudio ? playParagraphAudio(paragraphAudios[idx], idx) : null} 
-                            disabled={!hasAudio && !isFullAutoRunning}
-                            className={`flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${isPlaying ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 scale-110' : hasAudio ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'bg-slate-50 text-slate-200'}`}
-                          >
-                            {isPlaying ? (
-                              <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path></svg>
-                            ) : (
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
-                            )}
-                          </button>
-                          <p className={`text-2xl leading-relaxed text-slate-800 tracking-wide transition-all ${isPlaying ? 'font-medium' : ''}`}>
-                            {pText}
-                          </p>
-                        </div>
-                        
-                        {/* 译文 */}
-                        {translation && (
-                          <div className="ml-18 p-6 bg-slate-50/50 rounded-2xl border border-slate-100 italic text-lg text-slate-500 leading-relaxed animate-in fade-in duration-700">
-                            {translation}
-                          </div>
-                        )}
-
-                        {/* 解析卡片 */}
-                        {analysis && (
-                          <div className="ml-18 border border-amber-100 rounded-3xl overflow-hidden bg-amber-50/30">
+                      <div key={idx} className="relative group">
+                         {/* Dot Decoration like poster */}
+                         <div className="absolute -left-12 top-2 w-2 h-2 rounded-full bg-black opacity-10 group-hover:opacity-100 transition-opacity"></div>
+                         
+                         <div className="flex items-start space-x-10">
                             <button 
-                              onClick={() => setCollapsedAnalyses(prev => ({ ...prev, [idx]: !prev[idx] }))}
-                              className="w-full flex items-center justify-between px-6 py-4 hover:bg-amber-100/30 transition-colors"
+                              onClick={() => hasAudio && playParagraphAudio(paragraphAudios[idx], idx)}
+                              className={`flex-shrink-0 w-12 h-12 border-2 border-black flex items-center justify-center transition-all ${isPlaying ? 'bg-black text-[#e8e4d8]' : 'hover:bg-black/5'}`}
                             >
-                              <div className="flex items-center space-x-3">
-                                <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
-                                <span className="text-[10px] font-black uppercase text-amber-700 tracking-widest">文学深度解析</span>
-                              </div>
-                              <span className="text-amber-400 transform transition-transform duration-300">
-                                {isCollapsed ? '展开' : '收起'}
-                              </span>
+                               {isPlaying ? '■' : '▶'}
                             </button>
-                            {!isCollapsed && (
-                              <div className="px-6 pb-6 animate-in slide-in-from-top-4 duration-500">
-                                <SimpleMarkdown text={analysis} />
-                              </div>
-                            )}
-                          </div>
-                        )}
+                            <div className="flex-1 space-y-12">
+                               <p className="text-3xl serif-text font-medium leading-[1.6] tracking-tight">{text}</p>
+                               
+                               {translation && (
+                                 <div className="italic text-xl text-black/40 border-l-2 border-black/10 pl-8 leading-relaxed">
+                                   {translation}
+                                 </div>
+                               )}
 
-                        {!analysis && !isFullAutoRunning && (
-                           <div className="flex justify-end pr-4">
-                             <button 
-                              onClick={() => handleAnalyzeParagraph(idx)}
-                              className="text-[10px] font-black uppercase tracking-widest text-slate-300 hover:text-indigo-400 transition-colors"
-                             >
-                               {isAnalyzingP ? '分析中...' : '深度解析本段'}
-                             </button>
-                           </div>
-                        )}
+                               {analysis && (
+                                 <div className="bg-black text-[#e8e4d8] p-10 space-y-4">
+                                    <div className="text-[10px] font-black tracking-[0.4em] uppercase opacity-40">Analysis Depth</div>
+                                    <SimpleMarkdown text={analysis} />
+                                 </div>
+                               )}
+
+                               {!analysis && !isFullAutoRunning && (
+                                 <button 
+                                   onClick={() => analyzeParagraph(text, selectedTranslationModel).then(res => setParagraphAnalyses(p => ({...p, [idx]: res})))}
+                                   className="text-[10px] font-black tracking-[0.3em] uppercase opacity-20 hover:opacity-100 transition-opacity"
+                                 >
+                                    [ Request Linguistic Analysis ]
+                                 </button>
+                               )}
+                            </div>
+                         </div>
+                         <div className="h-px bg-black/5 w-full mt-24"></div>
                       </div>
                     );
                   })}
                 </div>
 
-                <footer className="mt-40 pt-10 border-t border-slate-100 flex items-center justify-between text-slate-300 font-black text-[10px] uppercase tracking-[0.3em] pb-32">
-                   <button disabled={activeChapterIndex === 0} onClick={() => { setActiveChapterIndex(activeChapterIndex - 1); clearChapterData(); }} className="hover:text-indigo-500 disabled:opacity-30">Previous</button>
-                   <span className="text-slate-200">{activeChapterIndex + 1} / {chapters.length}</span>
-                   <button disabled={activeChapterIndex === chapters.length - 1} onClick={() => { setActiveChapterIndex(activeChapterIndex + 1); clearChapterData(); }} className="hover:text-indigo-500 disabled:opacity-30">Next</button>
+                <footer className="mt-64 flex items-center justify-between border-t-4 border-black pt-10">
+                   <div className="text-4xl font-black serif-text opacity-10 italic">Fin.</div>
+                   <div className="flex space-x-12">
+                      <button disabled={activeChapterIndex === 0} onClick={() => { setActiveChapterIndex(p => p - 1); clearChapterData(); }} className="text-xs font-black tracking-widest uppercase disabled:opacity-10">PREV</button>
+                      <button disabled={activeChapterIndex === chapters.length - 1} onClick={() => { setActiveChapterIndex(p => p + 1); clearChapterData(); }} className="text-xs font-black tracking-widest uppercase disabled:opacity-10">NEXT</button>
+                   </div>
                 </footer>
               </>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-64 text-slate-200">
-                <span className="text-4xl mb-4">📑</span>
-                <span className="text-[10px] font-black uppercase tracking-widest">请选择章节开始阅读</span>
-              </div>
             )}
-          </article>
+          </div>
         </div>
       </main>
     </div>
